@@ -41,7 +41,7 @@ int tripplebuffer_get_ptr(void **ptr, tripplebuffer_t *tripplebuffer, unsigned l
         THROW_ERR(-1, "Invalid start location", return retval);
 #endif
 
-    void *buffer;
+    unsigned char *buffer;
 
     switch (buffer_name)
     {
