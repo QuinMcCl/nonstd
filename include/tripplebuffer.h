@@ -3,6 +3,14 @@
 
 #include <pthread.h> 
 
+
+typedef enum buffer_name_e
+{
+    FRONT,
+    MIDDLE,
+    BACK
+} buffer_name_t;
+
 typedef struct tripplebuffer_s
 {
     unsigned long int block_size;
@@ -28,5 +36,10 @@ int tripplebuffer_free(tripplebuffer_t *tripplebuffer);
 
 int tripplebuffer_cpy_out_front(void *dst,  tripplebuffer_t *tripplebuffer, unsigned long int start, unsigned long int count);
 int tripplebuffer_cpy_in_back (void *src,  tripplebuffer_t *tripplebuffer, unsigned long int start, unsigned long int count);
+
+
+int tripplebuffer_swap_front(tripplebuffer_t *tripplebuffer);
+int tripplebuffer_swap_back(tripplebuffer_t *tripplebuffer);
+
 
 #endif

@@ -22,10 +22,12 @@ void *backthreadfunc(void *arg)
             if (value[1])
                 value[1]--;
             CHECK(tripplebuffer_cpy_in_back(value, tripplebuffer, 0, 2), pthread_exit(NULL));
+            CHECK(tripplebuffer_swap_back(tripplebuffer), pthread_exit(NULL));
         }
         CHECK(get_current_state(&now_state), pthread_exit(NULL));
         ts.tv_sec = 0l;
-        ts.tv_nsec = 100000000l; // 10hz
+        // ts.tv_nsec = 100000000l; // 10hz
+        ts.tv_nsec = 1000000l; // 1000hz
         while (nanosleep(&ts, &ts))
             ;
     };
@@ -46,6 +48,7 @@ void *frontthreadfunc(void *arg)
     {
         if (now_state == RUN)
         {
+            CHECK(tripplebuffer_swap_front(tripplebuffer), pthread_exit(NULL));
             CHECK(tripplebuffer_cpy_out_front(value, tripplebuffer, 0, 2), pthread_exit(NULL));
             fprintf(stdout, "%lu:%lu\n", value[0], value[1]);
             fflush(stdout);
