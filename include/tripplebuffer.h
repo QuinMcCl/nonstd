@@ -34,6 +34,8 @@ typedef struct tripplebuffer_s
 int tripplebuffer_alloc(tripplebuffer_t *tripplebuffer, unsigned long int max_count, unsigned long int stride);
 int tripplebuffer_free(tripplebuffer_t *tripplebuffer);
 
+int tripplebuffer_get_ptr(void **ptr, tripplebuffer_t *tripplebuffer, unsigned long int start, buffer_name_t buffer_name);
+
 int tripplebuffer_cpy_out_front(void *dst,  tripplebuffer_t *tripplebuffer, unsigned long int start, unsigned long int count);
 int tripplebuffer_cpy_in_back (void *src,  tripplebuffer_t *tripplebuffer, unsigned long int start, unsigned long int count);
 
