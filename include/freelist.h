@@ -2,14 +2,12 @@
 #define FREELIST_H
 #include "pool.h"
 
-typedef struct freelist_node_s
-{
-    long int next;
-} freelist_node_t;
+#include <pthread.h>
 
 typedef struct freelist_s
 {
     unsigned long int first;
+    pthread_mutex_t mutex_lock;
     pool_t pool;
 } freelist_t;
 

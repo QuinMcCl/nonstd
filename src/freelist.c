@@ -14,17 +14,20 @@ int freelist_alloc(freelist_t *free_list, unsigned long int item_count, unsigned
     if (free_list == NULL)
         THROW_ERR(-1, "NULL FREELIST PTR", return retval);
 #endif
-    CHECK(pool_alloc(&(free_list->pool), item_count, item_size), return retval);
 
+    CHECK(pool_alloc(&(free_list->pool), item_count, item_size), return retval);
+    CHECK(pool_cpy_in(NULL, &(free_list->pool), 0, item_count), return retval);
+
+    THROW_ERR(pthread_mutex_lock(&(free_list->mutex_lock)), strerror(errno), return retval);
     free_list->first = 0;
-    memset(free_list->pool.block, -1, free_list->pool.block_size);
+    THROW_ERR(pthread_mutex_unlock(&(free_list->mutex_lock)), strerror(errno), return retval);
 
     for (unsigned long int i = 0; i < free_list->pool.max_count; i++)
     {
-        unsigned long int *pool_ptr = NULL;
-        CHECK(pool_get_ptr((void **)&pool_ptr, &(free_list->pool), i), return retval);
-        *pool_ptr = i + 1ul;
+        unsigned long int next = i + 1ul;
+        CHECK(pool_cpy_in_b(&(free_list->pool), &next, i, sizeof(unsigned long int)), return retval);
     }
+
     return 0;
 }
 
@@ -35,7 +38,9 @@ int freelist_free(freelist_t *free_list)
         THROW_ERR(-1, "NULL FREELIST PTR", return retval);
 #endif
 
+    THROW_ERR(pthread_mutex_lock(&(free_list->mutex_lock)), strerror(errno), return retval);
     free_list->first = -1;
+    THROW_ERR(pthread_mutex_unlock(&(free_list->mutex_lock)), strerror(errno), return retval);
     CHECK(pool_free(&(free_list->pool)), return retval);
     return 0;
 }
@@ -49,17 +54,16 @@ int freelist_aquire(unsigned long int *dst_index_ptr, freelist_t *free_list)
         THROW_ERR(-1, "NULL FREELIST PTR", return retval);
 #endif
 
-    unsigned long int *first_pool_ptr = NULL;
-    CHECK(pool_get_ptr((void **)&first_pool_ptr, &(free_list->pool), free_list->first), return retval);
-
-#ifdef ERROR_CHECKING
-    if (first_pool_ptr == NULL)
-        THROW_ERR(-1, "NULL first_pool_ptr PTR", return retval);
-#endif
+    THROW_ERR(pthread_mutex_lock(&(free_list->mutex_lock)), strerror(errno), return retval);
 
     *dst_index_ptr = free_list->first;
-    free_list->first = *first_pool_ptr;
-    *first_pool_ptr = -1;
+
+    CHECK(pool_cpy_out_b(&(free_list->pool), &(free_list->first), free_list->first, sizeof(unsigned long int)), {
+        THROW_ERR(pthread_mutex_unlock(&(free_list->mutex_lock)), strerror(errno), return retval);
+        return retval;
+    });
+
+    THROW_ERR(pthread_mutex_unlock(&(free_list->mutex_lock)), strerror(errno), return retval);
 
     return 0;
 }
@@ -72,18 +76,17 @@ int freelist_release(unsigned long int *src_index_ptr, freelist_t *free_list)
     if (free_list == NULL)
         THROW_ERR(-1, "NULL FREELIST PTR", return retval);
 #endif
+    THROW_ERR(pthread_mutex_lock(&(free_list->mutex_lock)), strerror(errno), return retval);
 
-    unsigned long int *src_pool_ptr = NULL;
-    CHECK(pool_get_ptr((void **)&src_pool_ptr, &(free_list->pool), *src_index_ptr), return retval);
+    CHECK(pool_cpy_in_b(&(free_list->pool), &(free_list->first), *src_index_ptr, sizeof(unsigned long int)), {
+        THROW_ERR(pthread_mutex_unlock(&(free_list->mutex_lock)), strerror(errno), return retval);
+        return retval;
+    });
 
-#ifdef ERROR_CHECKING
-    if (src_pool_ptr == NULL)
-        THROW_ERR(-1, "NULL tmp_ptr PTR", return retval);
-#endif
-
-    *src_pool_ptr = free_list->first;
     free_list->first = *src_index_ptr;
     *src_index_ptr = -1;
+
+    THROW_ERR(pthread_mutex_unlock(&(free_list->mutex_lock)), strerror(errno), return retval);
 
     return 0;
 }

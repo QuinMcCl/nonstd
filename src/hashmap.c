@@ -7,7 +7,6 @@
 #include "safeguards.h"
 #include "hashmap.h"
 
-
 hashfunc_t default_hash_func;
 
 unsigned long int MurmurOAAT32(unsigned char *key, unsigned long int key_size)
@@ -42,66 +41,110 @@ unsigned long int JenkinsOAAT32(unsigned char *key, unsigned long int key_size)
 
 int hashmap_get_hash_node_index(hashmap_t *map, unsigned char *key, unsigned long int key_size, unsigned long int **hash_node_index, hash_node_t **hash_node);
 
-int alloc_hashmap(hashmap_t *map, hashfunc_t hashfunc, unsigned long int hashpool_count, unsigned long int hashnode_count)
+int alloc_hashmap(hashmap_t *map, hashfunc_t hashfunc, unsigned long int hash_count, unsigned long int hash_node_count)
 {
+#ifdef ERROR_CHECKING
+    THROW_ERR((map == NULL), "NULL MAP PTR", return retval);
+    THROW_ERR((hash_count == 0), "INVALID HASH COUNT", return retval);
+    THROW_ERR((hash_node_count == 0), "INVALID HASH_NODE COUNT", return retval);
+#endif
+
+    THROW_ERR(pthread_rwlock_wrlock(&(map->rw_lock)), strerror(errno), return retval);
+
     if (hashfunc == NULL)
     {
         map->hashfunc = &MurmurOAAT32;
-        // map->hashfunc = &JenkinsOAAT32;
     }
     else
     {
         map->hashfunc = hashfunc;
     }
 
-    CHECK(pool_alloc(&(map->hash_pool), hashpool_count, sizeof(unsigned long int)), return retval);
+    map->hash_count = hash_count;
 
-    memset(map->hash_pool.block, -1, map->hash_pool.block_size);
+    CHECK(safe_alloc((void **)&(map->hash_to_index), map->hash_count * sizeof(unsigned long int)), {
+        THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
+        return retval;
+    });
+    memset(map->hash_to_index, -1, map->hash_count * sizeof(unsigned long int));
 
-    CHECK(freelist_alloc(&(map->hashnode_freelist), hashnode_count, sizeof(hash_node_t)), return retval);
+    map->first_free_node = 0;
+    map->hash_node_count = hash_node_count;
+    CHECK(safe_alloc((void **)&(map->hash_node_list), map->hash_node_count * sizeof(hash_node_t)), {
+        THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
+        return retval;
+    });
+    memset(map->hash_node_list, 0, map->hash_node_count * sizeof(hash_node_t));
+
+    for (unsigned int i = 0; i < map->hash_node_count; i++)
+    {
+        map->hash_node_list[i].next = i + 1;
+    }
+
+    THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
     return 0;
 }
 
 int free_hashmap(hashmap_t *map)
 {
+#ifdef ERROR_CHECKING
+    THROW_ERR((map == NULL), "NULL MAP PTR", return retval);
+    THROW_ERR((map->hash_count == 0), "INVALID HASH COUNT", return retval);
+    THROW_ERR((map->hash_node_count == 0), "INVALID HASH_NODE COUNT", return retval);
+#endif
 
-    CHECK(pool_free(&(map->hash_pool)), return retval);
-    CHECK(freelist_free(&(map->hashnode_freelist)), return retval);
+    THROW_ERR(pthread_rwlock_wrlock(&(map->rw_lock)), strerror(errno), return retval);
+
+    map->hashfunc = NULL;
+
+    CHECK(safe_free((void **)&(map->hash_to_index), map->hash_count * sizeof(unsigned long int)), {
+        THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
+        return retval;
+    });
+    map->hash_count = 0;
+
+    CHECK(safe_free((void **)&(map->hash_node_list), map->hash_node_count * sizeof(hash_node_t)), {
+        THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
+        return retval;
+    });
+    map->hash_node_count = 0;
+    map->first_free_node = (unsigned long int)-1l;
+
+    THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
     return 0;
 }
 
 int hashmap_get_hash_node_index(hashmap_t *map, unsigned char *key, unsigned long int key_size, unsigned long int **hash_node_index, hash_node_t **hash_node)
 {
 #ifdef ERROR_CHECKING
-    if (map == NULL)
-        THROW_ERR(-1, "NULL MAP PTR", return retval);
-    if (key == NULL)
-        THROW_ERR(-1, "NULL KEY PTR", return retval);
-    if (key_size == 0)
-        THROW_ERR(-1, "INVALID KEY SIZE", return retval);
-    if (map->hashfunc == NULL)
-        THROW_ERR(-1, "NULL HASHFUNC PTR", return retval);
+    THROW_ERR((map == NULL), "NULL MAP PTR", return retval);
+    THROW_ERR((map->hash_count == 0), "INVALID HASH COUNT", return retval);
+    THROW_ERR((map->hash_node_count == 0), "INVALID HASH_NODE COUNT", return retval);
+    THROW_ERR((map->hashfunc == NULL), "NULL HASHFUNC PTR", return retval);
+    THROW_ERR((key == NULL), "NULL KEY PTR", return retval);
+    THROW_ERR((key_size == 0), "INVALID KEY SIZE", return retval);
+    THROW_ERR((hash_node_index == NULL), "NULL HASN_NODE_INDEX PTR", return retval);
+    THROW_ERR((hash_node == NULL), "NULL HASN_NODE PTR", return retval);
 #endif
 
-    unsigned long int hash_index = map->hashfunc(key, key_size) & (map->hash_pool.max_count - 1);
+    unsigned long int hash_index = map->hashfunc(key, key_size) & (map->hash_count - 1ul);
     // unsigned long int hash_index = map->hashfunc(key, key_size) % (map->hash_pool.item_count);
 
-    CHECK(pool_get_ptr((void **)hash_node_index, &(map->hash_pool), hash_index), return retval);
+    *hash_node_index = &(map->hash_to_index[hash_index]);
 
-    while (**hash_node_index < map->hashnode_freelist.pool.max_count)
+    while (**hash_node_index < map->hash_node_count)
     {
-        *hash_node = (hash_node_t *)NULL;
-        CHECK(pool_get_ptr((void **)hash_node, &(map->hashnode_freelist.pool), **hash_node_index), return retval);
+        *hash_node = &(map->hash_node_list[**hash_node_index]);
         if ((*hash_node)->key_size == key_size && !memcmp(&((*hash_node)->key_buff), key, key_size))
         {
             break;
         }
         *hash_node_index = &((*hash_node)->next);
+        *hash_node = NULL;
     };
 
 #ifdef ERROR_CHECKING
-    if (*hash_node_index == NULL)
-        THROW_ERR(-1, "NULL HASH NODE INDEX PTR", return retval);
+    THROW_ERR((*hash_node_index == NULL), "NULL HASH NODE INDEX PTR", return retval);
 #endif
 
     return 0;
@@ -110,54 +153,71 @@ int hashmap_get_hash_node_index(hashmap_t *map, unsigned char *key, unsigned lon
 int hashmap_add(void *data, hashmap_t *map, unsigned char *key, unsigned long int key_size)
 {
 #ifdef ERROR_CHECKING
-    if (data == NULL)
-        THROW_ERR(-1, "NULL DATA PTR", return retval);
+    THROW_ERR((data == NULL), "NULL DATA PTR", return retval);
+    THROW_ERR((map->first_free_node > map->hash_node_count), "MAP IS FULL", return retval);
 #endif
 
     unsigned long int *hash_node_index = NULL;
     hash_node_t *hash_node = NULL;
-    CHECK(hashmap_get_hash_node_index(map, key, key_size, &hash_node_index, &hash_node), return retval);
+
+    THROW_ERR(pthread_rwlock_wrlock(&(map->rw_lock)), strerror(errno), return retval);
+
+    CHECK(hashmap_get_hash_node_index(map, key, key_size, &hash_node_index, &hash_node), {
+        THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
+        return retval;
+    });
 
 #ifdef ERROR_CHECKING
-    if (*hash_node_index < map->hashnode_freelist.pool.max_count)
-        THROW_ERR(-1, "KEY ALREADY EXISTS", return retval);
+    THROW_ERR((*hash_node_index < map->hash_node_count), "KEY ALREADY EXISTS", {
+        THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
+        return retval;
+    });
 #endif
-
-    CHECK(freelist_aquire(hash_node_index, &(map->hashnode_freelist)), return retval);
-
-    hash_node = (hash_node_t *)NULL;
-    CHECK(pool_get_ptr((void **)&hash_node, &(map->hashnode_freelist.pool), *hash_node_index), return retval);
+    *hash_node_index = map->first_free_node;
+    hash_node = &(map->hash_node_list[*hash_node_index]);
+    map->first_free_node = hash_node->next;
 
     hash_node->key_size = key_size;
     memset(&(hash_node->key_buff), 0, MAX_KEY_LEN * sizeof(unsigned char));
     memcpy(&(hash_node->key_buff), key, key_size);
-    hash_node->next = (unsigned long int)(-1);
+    hash_node->next = (unsigned long int)-1l;
     hash_node->data = data;
 
+    THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
     return 0;
 }
 
 int hashmap_remove(void **data, hashmap_t *map, unsigned char *key, unsigned long int key_size)
 {
 #ifdef ERROR_CHECKING
-    if (data == NULL)
-        THROW_ERR(-1, "NULL DATA PTR", return retval);
+    THROW_ERR((data == NULL), "NULL DATA PTR", return retval);
 #endif
 
     unsigned long int *hash_node_index = NULL;
     hash_node_t *hash_node = NULL;
-    CHECK(hashmap_get_hash_node_index(map, key, key_size, &hash_node_index, &hash_node), return retval);
 
-    if (*hash_node_index < map->hashnode_freelist.pool.max_count)
+    THROW_ERR(pthread_rwlock_wrlock(&(map->rw_lock)), strerror(errno), return retval);
+
+    CHECK(hashmap_get_hash_node_index(map, key, key_size, &hash_node_index, &hash_node), {
+        THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
+        return retval;
+    });
+
+    if (*hash_node_index < map->hash_node_count)
     {
 #ifdef ERROR_CHECKING
-        if (hash_node == NULL)
-            THROW_ERR(-1, "NULL hash_node PTR", return retval);
+        THROW_ERR((hash_node == NULL), "NULL hash_node PTR", {
+            THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
+            return retval;
+        });
 #endif
         *data = hash_node->data;
-
-        CHECK(freelist_release(hash_node_index, &(map->hashnode_freelist)), return retval);
+        hash_node->next = map->first_free_node;
+        map->first_free_node = *hash_node_index;
+        *hash_node_index = (unsigned long int)-1l;
     }
+
+    THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
 
     return 0;
 }
@@ -165,54 +225,69 @@ int hashmap_remove(void **data, hashmap_t *map, unsigned char *key, unsigned lon
 int hashmap_find(void **data, hashmap_t *map, unsigned char *key, unsigned long int key_size)
 {
 #ifdef ERROR_CHECKING
-    if (data == NULL)
-        THROW_ERR(-1, "NULL DATA PTR", return retval);
+    THROW_ERR((data == NULL), "NULL DATA PTR", return retval);
 #endif
 
     unsigned long int *hash_node_index = NULL;
     hash_node_t *hash_node = NULL;
-    CHECK(hashmap_get_hash_node_index(map, key, key_size, &hash_node_index, &hash_node), return retval);
 
-    if (*hash_node_index < map->hashnode_freelist.pool.max_count)
+    THROW_ERR(pthread_rwlock_rdlock(&(map->rw_lock)), strerror(errno), return retval);
+
+    CHECK(hashmap_get_hash_node_index(map, key, key_size, &hash_node_index, &hash_node), {
+        THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
+        return retval;
+    });
+
+    if (*hash_node_index < map->hash_node_count)
     {
 #ifdef ERROR_CHECKING
-        if (hash_node == NULL)
-            THROW_ERR(-1, "NULL hash_node PTR", return retval);
+        THROW_ERR((hash_node == NULL), "NULL hash_node PTR", {
+            THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
+            return retval;
+        });
 #endif
         *data = hash_node->data;
     }
 
+    THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
     return 0;
 }
 
 int hashmap_print_nodes(hashmap_t *map)
 {
+#ifdef ERROR_CHECKING
+    THROW_ERR((map == NULL), "NULL MAP PTR", return retval);
+#endif
+
     unsigned long int *hash_node_index = NULL;
     unsigned long int depth = 0;
-    hash_node_t *hash_node;
+    hash_node_t *hash_node = NULL;
+
+
+    THROW_ERR(pthread_rwlock_rdlock(&(map->rw_lock)), strerror(errno), return retval);
+
     fprintf(stdout, "depth\tkey_size\tkey\tnext\tdata_ptr\tcount\n");
 
-    for (unsigned int i = 0; i < map->hash_pool.max_count; i++)
+    for (unsigned int i = 0; i < map->hash_count; i++)
     {
-        hash_node_index = (unsigned long int *)NULL;
-        CHECK(pool_get_ptr((void **)&hash_node_index, &(map->hash_pool), i), return retval);
+        hash_node_index = &(map->hash_to_index[i]);
 
-        if (*hash_node_index >= map->hashnode_freelist.pool.max_count)
+        if (*hash_node_index > map->hash_node_count)
         {
             fprintf(stdout, "%ld\t%ld\t%s\t%ld\t%p\t%ld\n", -1l, -1l, "", -1l, NULL, -1l);
         }
 
         depth = 0;
-        while (*hash_node_index < map->hashnode_freelist.pool.max_count)
+        while (*hash_node_index < map->hash_node_count)
         {
-            hash_node = (hash_node_t *)NULL;
-            CHECK(pool_get_ptr((void **)&hash_node, &(map->hashnode_freelist.pool), *hash_node_index), return retval);
-
+            hash_node = &(map->hash_node_list[*hash_node_index]);
             fprintf(stdout, "%ld\t%ld\t%s\t%ld\t%p\t%ld\n", depth, hash_node->key_size, hash_node->key_buff, hash_node->next, hash_node->data, *(unsigned long int *)(hash_node->data));
 
             hash_node_index = &(hash_node->next);
             depth++;
         };
     }
+
+    THROW_ERR(pthread_rwlock_unlock(&(map->rw_lock)), strerror(errno), return retval);
     return 0;
 }

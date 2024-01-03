@@ -126,7 +126,6 @@ int tripplebuffer_cpy_in_back(void *src, tripplebuffer_t *tripplebuffer, unsigne
     void *dst = NULL;
     CHECK(tripplebuffer_get_ptr(&dst, tripplebuffer, start, BACK), return retval);
 
-
 #ifdef ERROR_CHECKING
     if (dst == NULL)
         THROW_ERR(-1, "NULL buffer pointer", return retval);
