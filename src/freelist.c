@@ -16,7 +16,6 @@ int freelist_alloc(freelist_t *free_list, unsigned long int item_count, unsigned
 #endif
 
     CHECK(pool_alloc(&(free_list->pool), item_count, item_size), return retval);
-    CHECK(pool_cpy_in(NULL, &(free_list->pool), 0, item_count), return retval);
 
     THROW_ERR(pthread_mutex_lock(&(free_list->mutex_lock)), strerror(errno), return retval);
     free_list->first = 0;

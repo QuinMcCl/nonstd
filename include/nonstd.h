@@ -8,6 +8,7 @@ extern "C" {
 #include "safeguards.h"
 #include "pool.h"
 #include "arraylist.h"
+#include "freelist.h"
 #include "hashmap.h"
 #include "tripplebuffer.h"
 
