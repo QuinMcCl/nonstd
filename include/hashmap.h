@@ -31,8 +31,8 @@ typedef struct hashmap_s
     // freelist_t hashnode_freelist;
 } hashmap_t;
 
-int alloc_hashmap(hashmap_t *map, hashfunc_t hashfunc, unsigned long int hashpool_count, unsigned long int hashnode_count);
-int free_hashmap(hashmap_t *map);
+int hashmap_alloc(hashmap_t *map, hashfunc_t hashfunc, unsigned long int hashpool_count, unsigned long int hashnode_count);
+int hashmap_free(hashmap_t *map);
 int hashmap_add(void *data, hashmap_t *map, unsigned char *key, unsigned long int key_size);
 int hashmap_remove(void **data, hashmap_t *map, unsigned char *key, unsigned long int key_size);
 int hashmap_find(void **data, hashmap_t *map, unsigned char *key, unsigned long int key_size);

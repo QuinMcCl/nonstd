@@ -28,7 +28,7 @@ int hashmap_test()
 
     hashmap_t hashmap;
     memset(&hashmap, 0, sizeof(hashmap_t));
-    CHECK(alloc_hashmap(&hashmap, NULL, MAX_WORD, MAX_WORD), return EXIT_FAILURE);
+    CHECK(hashmap_alloc(&hashmap, NULL, MAX_WORD, MAX_WORD), return EXIT_FAILURE);
 
     FILE *f_ptr;
     f_ptr = fopen("./resources/pg100.txt", "r");
@@ -88,7 +88,7 @@ int hashmap_test()
 
     fclose(f_ptr);
     CHECK(hashmap_print_nodes(&hashmap), return EXIT_FAILURE);
-    CHECK(free_hashmap(&hashmap), return EXIT_FAILURE);
+    CHECK(hashmap_free(&hashmap), return EXIT_FAILURE);
     CHECK(freelist_free(&wordcount_freelist), return EXIT_FAILURE);
 
     return 0;

@@ -41,7 +41,7 @@ unsigned long int JenkinsOAAT32(unsigned char *key, unsigned long int key_size)
 
 int hashmap_get_hash_node_index(hashmap_t *map, unsigned char *key, unsigned long int key_size, unsigned long int **hash_node_index, hash_node_t **hash_node);
 
-int alloc_hashmap(hashmap_t *map, hashfunc_t hashfunc, unsigned long int hash_count, unsigned long int hash_node_count)
+int hashmap_alloc(hashmap_t *map, hashfunc_t hashfunc, unsigned long int hash_count, unsigned long int hash_node_count)
 {
 #ifdef ERROR_CHECKING
     THROW_ERR((map == NULL), "NULL MAP PTR", return retval);
@@ -85,7 +85,7 @@ int alloc_hashmap(hashmap_t *map, hashfunc_t hashfunc, unsigned long int hash_co
     return 0;
 }
 
-int free_hashmap(hashmap_t *map)
+int hashmap_free(hashmap_t *map)
 {
 #ifdef ERROR_CHECKING
     THROW_ERR((map == NULL), "NULL MAP PTR", return retval);
