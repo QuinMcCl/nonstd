@@ -145,10 +145,8 @@ int pool_cpy_in(void *src, pool_t *pool, unsigned long int start, unsigned long 
 int pool_cpy_in_b(pool_t *pool, void *src, unsigned long int start, unsigned long int count)
 {
 #ifdef ERROR_CHECKING
-    if (src == NULL)
-        THROW_ERR(-1, "CANNOT COPY FROM NULL PTR", return retval);
-    if (((start * pool->stride) + count) > pool->block_size)
-        THROW_ERR(-1, "TRYING TO COPY OUTSIDE OF BUFFER", return retval);
+    THROW_ERR((src == NULL), "CANNOT COPY FROM NULL PTR", return retval);
+    THROW_ERR((((start * pool->stride) + count) > pool->block_size), "TRYING TO COPY OUTSIDE OF BUFFER", return retval);
 #endif
 
     THROW_ERR(pthread_rwlock_wrlock(&(pool->rwlock)), strerror(errno), return retval);
