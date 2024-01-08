@@ -153,7 +153,6 @@ int hashmap_get_hash_node_index(hashmap_t *map, unsigned char *key, unsigned lon
 int hashmap_add(void *data, hashmap_t *map, unsigned char *key, unsigned long int key_size)
 {
 #ifdef ERROR_CHECKING
-    THROW_ERR((data == NULL), "NULL DATA PTR", return retval);
     THROW_ERR((map->first_free_node > map->hash_node_count), "MAP IS FULL", return retval);
 #endif
 

@@ -21,11 +21,11 @@ typedef struct hashmap_s
     pthread_rwlock_t rw_lock;
 
     unsigned long int hash_count;
-    unsigned long int * hash_to_index;
+    unsigned long int *hash_to_index;
 
     unsigned long int first_free_node;
     unsigned long int hash_node_count;
-    hash_node_t * hash_node_list;
+    hash_node_t *hash_node_list;
 
     // pool_t hash_pool;
     // freelist_t hashnode_freelist;
