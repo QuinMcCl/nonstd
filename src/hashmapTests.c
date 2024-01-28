@@ -20,7 +20,7 @@ typedef struct wordcounter_s
 int hashmap_test()
 {
     program_state_t now_state = INIT;
-    CHECK(set_current_state(&now_state), return EXIT_FAILURE);
+    CHECK(set_current_state(now_state), return EXIT_FAILURE);
 
     freelist_t wordcount_freelist;
     memset(&wordcount_freelist, 0, sizeof(freelist_t));
@@ -40,7 +40,7 @@ int hashmap_test()
     memset(y, 0, 256 * sizeof(char));
 
     now_state = RUN;
-    CHECK(set_current_state(&now_state), return EXIT_FAILURE);
+    CHECK(set_current_state(now_state), return EXIT_FAILURE);
 
     while (fscanf(f_ptr, " %255s", x) == 1)
     {
@@ -84,7 +84,7 @@ int hashmap_test()
     }
 
     now_state = INIT;
-    CHECK(set_current_state(&now_state), return EXIT_FAILURE);
+    CHECK(set_current_state(now_state), return EXIT_FAILURE);
 
     fclose(f_ptr);
     CHECK(hashmap_print_nodes(&hashmap), return EXIT_FAILURE);

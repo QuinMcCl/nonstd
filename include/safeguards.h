@@ -57,7 +57,8 @@ typedef enum program_state_e
 } program_state_t;
 
 int get_current_state(program_state_t *state);
-int set_current_state(program_state_t *state);
+int set_current_state(const program_state_t state);
+int wait_until_state(const program_state_t state);
 
 int safe_alloc(void **ptr, unsigned long int size);
 int safe_free(void **ptr, unsigned long int size);

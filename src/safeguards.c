@@ -8,24 +8,36 @@
 
 #include "safeguards.h"
 
-pthread_rwlock_t state_lock;
+pthread_mutex_t state_lock;
+pthread_cond_t state_cond;
 program_state_t current_state = INIT;
 
 int get_current_state(program_state_t *state)
 {
 
-    THROW_ERR(pthread_rwlock_rdlock(&(state_lock)), strerror(errno), return retval);
+    THROW_ERR(pthread_mutex_lock(&(state_lock)), strerror(errno), return retval);
     *state = current_state;
-    THROW_ERR(pthread_rwlock_unlock(&(state_lock)), strerror(errno), return retval);
+    THROW_ERR(pthread_mutex_unlock(&(state_lock)), strerror(errno), return retval);
 
     return 0;
 }
 
-int set_current_state(program_state_t *state)
+int set_current_state(const program_state_t state)
 {
-    THROW_ERR(pthread_rwlock_wrlock(&(state_lock)), strerror(errno), return retval);
-    current_state = *state;
-    THROW_ERR(pthread_rwlock_unlock(&(state_lock)), strerror(errno), return retval);
+    THROW_ERR(pthread_mutex_lock(&(state_lock)), strerror(errno), return retval);
+    current_state = state;
+    pthread_cond_signal(&(state_cond));
+    THROW_ERR(pthread_mutex_unlock(&(state_lock)), strerror(errno), return retval);
+
+    return 0;
+}
+
+int wait_until_state(const program_state_t state)
+{
+    THROW_ERR(pthread_mutex_lock(&(state_lock)), strerror(errno), return retval);
+    while (current_state != state)
+        pthread_cond_wait(&(state_cond), &(state_lock));
+    THROW_ERR(pthread_mutex_unlock(&(state_lock)), strerror(errno), return retval);
 
     return 0;
 }
@@ -77,7 +89,7 @@ int safe_free(void **ptr, unsigned long int size)
 
     program_state_t now_state = INVALID_STATE;
     CHECK(get_current_state(&now_state), return retval);
-    
+
     if (now_state == RUN)
     {
         THROW_ERR(-1, "CANNOT FREE DURRING RUN", return retval);

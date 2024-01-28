@@ -11,12 +11,14 @@ extern "C" {
 #include "freelist.h"
 #include "hashmap.h"
 #include "tripplebuffer.h"
+#include "async.h"
 
 
 
 #include "arraylistTests.h"
 #include "hashmapTests.h"
 #include "tripplebufferTests.h"
+#include "asyncTests.h"
 
 
 #ifdef __cplusplus

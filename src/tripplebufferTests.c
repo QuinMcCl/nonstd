@@ -67,7 +67,7 @@ int tripplebuffer_tests()
 {
     struct timespec ts;
     program_state_t now_state = INIT;
-    CHECK(set_current_state(&now_state), return EXIT_FAILURE);
+    CHECK(set_current_state(now_state), return EXIT_FAILURE);
 
     tripplebuffer_t test_tripplebuffer;
     memset(&test_tripplebuffer, 0, sizeof(tripplebuffer_t));
@@ -81,7 +81,7 @@ int tripplebuffer_tests()
     THROW_ERR(pthread_create(&frontThread, NULL, frontthreadfunc, &test_tripplebuffer), strerror(errno), return EXIT_FAILURE);
 
     now_state = RUN;
-    CHECK(set_current_state(&now_state), return EXIT_FAILURE);
+    CHECK(set_current_state(now_state), return EXIT_FAILURE);
 
     ts.tv_sec = 10l; // RUN FOR 10 SECONDS
     ts.tv_nsec = 0l;
@@ -89,7 +89,7 @@ int tripplebuffer_tests()
         ;
 
     now_state = STOP;
-    CHECK(set_current_state(&now_state), return EXIT_FAILURE);
+    CHECK(set_current_state(now_state), return EXIT_FAILURE);
 
     THROW_ERR(pthread_join(backThread, NULL), strerror(errno), return EXIT_FAILURE);
     THROW_ERR(pthread_join(frontThread, NULL), strerror(errno), return EXIT_FAILURE);
