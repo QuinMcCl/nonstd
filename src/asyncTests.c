@@ -8,7 +8,7 @@
 unsigned long fibb(unsigned long i)
 {
     if (i == 0ul || i == 1ul)
-    return i;
+        return i;
     else
         return fibb(i - 1ul) + fibb(i - 2ul);
 }
@@ -21,7 +21,6 @@ void worker_test(void *args)
     fprintf(stdout, "worker starting %lu\n", test_args->index);
     unsigned long fib = fibb(test_args->index);
 
-
     fprintf(stdout, "worker done %lu, fib: %lu\n", test_args->index, fib);
     pthread_mutex_lock(&(test_args->done_lock));
     test_args->done = 1;
@@ -31,22 +30,21 @@ void worker_test(void *args)
 
 int async_test()
 {
-#define MAX_CONCURRENT_TASKS 1024UL
+#define MAX_CONCURRENT_TASKS 17UL
 #define MAX_THREADS 16UL
 #define NUM_TASKS 64
 
-    async_task_t task_buffer[MAX_CONCURRENT_TASKS] = {0};
-    pthread_t threads[MAX_THREADS] = {0};
+    static async_task_t task_buffer[MAX_CONCURRENT_TASKS] __attribute__((__aligned__(8))) = {0};
+    static pthread_t threads[MAX_THREADS] __attribute__((__aligned__(8))) = {0};
 
     worker_test_args_t args[NUM_TASKS] = {0};
 
     task_queue_t tq = {0};
 
-    task_queue_init(&tq, sizeof(task_buffer), task_buffer, NULL, NULL, sizeof(threads), threads, NULL, NULL, NULL);
+    task_queue_init(&tq, sizeof(task_buffer), task_buffer, NULL, NULL, sizeof(threads), threads, NULL);
 
     for (unsigned long task_index = 0; task_index < NUM_TASKS; task_index++)
     {
-        fprintf(stdout, "Starting %lu\n", task_index);
 
         args[task_index].index = task_index;
         args[task_index].done = 0ul;
@@ -58,9 +56,13 @@ int async_test()
 
         while (tq.queue.push(&(tq.queue), sizeof(task), &task))
         {
-            fprintf(stdout, "task queue full\n");
+            pthread_mutex_lock(&(tq.queue.lock_queue));
+            fprintf(stdout, "task queue full %lu / %lu\n", tq.queue.mNumItems, tq.queue.mMaxItems);
+            while (tq.queue.mNumItems >= tq.queue.mMaxItems)
+                pthread_cond_wait(&(tq.queue.size_cond), &(tq.queue.lock_queue));
+            pthread_mutex_unlock(&(tq.queue.lock_queue));
         }
-        tq.awake(&tq);
+        fprintf(stdout, "Started %lu\n", task_index);
     }
 
     for (unsigned long task_index = 0; task_index < NUM_TASKS; task_index++)

@@ -46,10 +46,12 @@ int __queue_push(queue_t *q, size_t item_size, void *item)
         new_head = q->start;
     }
 
-    if (new_head != q->tail)
+    if (q->mNumItems < q->mMaxItems && new_head != q->tail)
     {
         memcpy(q->head, item, item_size);
         q->head = new_head;
+        q->mNumItems++;
+        pthread_cond_broadcast(&(q->size_cond));
     }
     else
     {
@@ -67,7 +69,7 @@ int __queue_pop(queue_t *q, size_t item_size, void *item)
 
     int retval = 0;
     pthread_mutex_lock(&(q->lock_queue));
-    if (q->tail != q->head)
+    if (q->mNumItems > 0 && q->tail != q->head)
     {
         memcpy(item, q->tail, item_size);
         q->tail += q->item_size;
@@ -75,6 +77,8 @@ int __queue_pop(queue_t *q, size_t item_size, void *item)
         {
             q->tail = q->start;
         }
+        q->mNumItems--;
+        pthread_cond_broadcast(&(q->size_cond));
     }
     else
     {
@@ -118,26 +122,14 @@ void queue_init(
     q->buf_len = backing_buffer_length;
     q->item_size = item_size;
 
+    q->mNumItems = 0ul;
+    q->mMaxItems = (q->buf_len / q->item_size) - 1ul;
     q->start = start;
     q->head = start;
     q->tail = start;
 
     q->push = push_func == NULL ? DEFAULT_Q_PUSH : push_func;
     q->pop = pop_func == NULL ? DEFAULT_Q_POP : pop_func;
-}
-
-void __workerSleep(task_queue_t *tq)
-{
-    pthread_mutex_lock(&(tq->sleep_lock));
-    pthread_cond_wait(&(tq->sleep_cond), &(tq->sleep_lock));
-    pthread_mutex_unlock(&(tq->sleep_lock));
-}
-
-void __workerAwake(task_queue_t *tq)
-{
-    pthread_mutex_lock(&(tq->sleep_lock));
-    pthread_cond_signal(&(tq->sleep_cond));
-    pthread_mutex_unlock(&(tq->sleep_lock));
 }
 
 void *__workerFunction(void *args)
@@ -151,7 +143,10 @@ void *__workerFunction(void *args)
         task.args = NULL;
         if (tq->queue.pop(&(tq->queue), sizeof(task), &task) || task.func == NULL)
         {
-            tq->sleep(tq);
+            pthread_mutex_lock(&(tq->queue.lock_queue));
+            while (tq->queue.mNumItems <= 0)
+                pthread_cond_wait(&(tq->queue.size_cond), &(tq->queue.lock_queue));
+            pthread_mutex_unlock(&(tq->queue.lock_queue));
         }
         else
         {
@@ -161,8 +156,6 @@ void *__workerFunction(void *args)
     return tq;
 }
 
-#define DEFAULT_SLEEP __workerSleep
-#define DEFAULT_AWAKE __workerAwake
 #define DEFAULT_WORK_FUNC __workerFunction
 
 void task_queue_init(
@@ -174,15 +167,11 @@ void task_queue_init(
 
     size_t worker_buffer_length,
     void *worker_buffer,
-    work_func_t work_func,
-    sleep_func_t sleep_func,
-    awake_func_t awake_func)
+    work_func_t work_func)
 {
-    queue_init(&(tq->queue), queue_buffer_length, queue_buffer, sizeof(async_task_t), 16UL, push_func, pop_func);
+    queue_init(&(tq->queue), queue_buffer_length, queue_buffer, sizeof(async_task_t), 8UL, push_func, pop_func);
 
     tq->work = work_func == NULL ? DEFAULT_WORK_FUNC : work_func;
-    tq->sleep = sleep_func == NULL ? DEFAULT_SLEEP : sleep_func;
-    tq->awake = awake_func == NULL ? DEFAULT_AWAKE : awake_func;
 
     tq->worker_buffer_lenth = worker_buffer_length;
     tq->worker_buffer = worker_buffer;

@@ -22,6 +22,9 @@ extern "C"
         size_t item_size;
 
         pthread_mutex_t lock_queue;
+        pthread_cond_t size_cond;
+        unsigned long mNumItems;
+        unsigned long mMaxItems;
         void *start;
         void *head;
         void *tail;
@@ -37,8 +40,6 @@ extern "C"
 
     typedef struct task_queue_s task_queue_t;
     typedef void *(*work_func_t)(void *);
-    typedef void (*sleep_func_t)(task_queue_t *);
-    typedef void (*awake_func_t)(task_queue_t *);
 
     struct task_queue_s
     {
@@ -46,11 +47,6 @@ extern "C"
         queue_t queue;
 
         work_func_t work;
-        sleep_func_t sleep;
-        awake_func_t awake;
-
-        pthread_mutex_t sleep_lock;
-        pthread_cond_t sleep_cond;
 
         size_t worker_buffer_lenth;
         pthread_t *worker_buffer;
@@ -65,9 +61,7 @@ extern "C"
 
         size_t worker_buffer_length,
         void *worker_buffer,
-        work_func_t work_func,
-        sleep_func_t sleep_func,
-        awake_func_t awake_func);
+        work_func_t work_func);
 
 #ifdef __cplusplus
 } /* extern "C" */
