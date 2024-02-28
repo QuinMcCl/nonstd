@@ -4,276 +4,151 @@
 #include <stddef.h>
 #include <errno.h>
 
+#include "util.h"
 #include "safeguards.h"
 #include "pool.h"
 
-int pool_alloc(pool_t *pool, unsigned long int max_count, unsigned long int stride)
+void *__pool_get_ptr(pool_t *pool, size_t start_index)
 {
-#ifdef ERROR_CHECKING
-    if (pool == NULL)
-        THROW_ERR(-1, "NULL POOL PTR", return retval);
-    if (max_count == 0)
-        THROW_ERR(-1, "INVALID MAX_COUNT", return retval);
-    if (stride == 0)
-        THROW_ERR(-1, "INVALID STRIDE", return retval);
-#endif
-
-    THROW_ERR(pthread_rwlock_wrlock(&(pool->rwlock)), strerror(errno), return retval);
-    pool->max_count = max_count;
-    pool->stride = stride;
-    pool->block_size = max_count * stride;
-    CHECK(safe_alloc((void **)&(pool->block), pool->block_size), {
-        THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-        return retval;
-    });
-    THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-
-    return 0;
+    return (pool == NULL || start_index * pool->item_size > pool->buf_len) ? NULL : (void *)(((size_t)pool->buf) + (start_index * pool->item_size));
 }
 
-int pool_free(pool_t *pool)
+int __pool_cpy_in(pool_t *pool, void *src, size_t start_index, size_t count, size_t stride, size_t size)
 {
-#ifdef ERROR_CHECKING
-    if (pool == NULL)
-        THROW_ERR(-1, "NULL POOL PTR", return retval);
-    if (pool->block == NULL)
-        THROW_ERR(-1, "NULL POOL BLOCK PTR", return retval);
-#endif
-
-    THROW_ERR(pthread_rwlock_wrlock(&(pool->rwlock)), strerror(errno), return retval);
-    CHECK(safe_free((void **)&(pool->block), pool->block_size), {
-        THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-        return retval;
-    });
-
-    pool->max_count = 0;
-    pool->stride = 0;
-    pool->block_size = 0;
-    THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-
-    return 0;
-}
-
-int pool_get_ptr(void **ptr, pool_t *pool, unsigned long int start)
-{
-#ifdef ERROR_CHECKING
-    if (ptr == NULL)
-        THROW_ERR(-1, "NULL PTR", return retval);
-    if (*ptr != NULL)
-        THROW_ERR(-1, "NON EMPTY PTR", return retval);
-    if (pool == NULL)
-        THROW_ERR(-1, "NULL POOL PTR", return retval);
-    if (pool->block == NULL)
-        THROW_ERR(-1, "NULL POOL BLOCK PTR", return retval);
-    if (pool->block_size == 0)
-        THROW_ERR(-1, "INVALID POOL BLOCK SIZE", return retval);
-    if (pool->max_count == 0)
-        THROW_ERR(-1, "INVALID POOL MAXCOUNT", return retval);
-    if (pool->stride == 0)
-        THROW_ERR(-1, "INVALID POOL STRIDE", return retval);
-    if (start >= pool->max_count)
-        THROW_ERR(-1, "INVALID START INDEX", return retval);
-#endif
-    *ptr = &(pool->block[start * pool->stride]);
-    return 0;
-}
-
-int pool_cpy_out(void *dst, pool_t *pool, unsigned long int start, unsigned long int count)
-{
-    if (dst == NULL)
+    CHECK_ERR(
+        pool == NULL || (start_index + count) * pool->item_size > pool->buf_len || size > pool->item_size
+            ? EINVAL
+            : EXIT_SUCCESS,
+        strerror(errno), return errno);
+    if (src == NULL || count <= 0 || size <= 0)
     {
         return 0;
     }
 
-#ifdef ERROR_CHECKING
-    if ((start + count) > pool->max_count)
-        THROW_ERR(-1, "TRYING TO COPY OUTSIDE OF BUFFER", return retval);
-#endif
-    THROW_ERR(pthread_rwlock_rdlock(&(pool->rwlock)), strerror(errno), return retval);
-    void *src = NULL;
-    CHECK(pool_get_ptr(&src, pool, start), {
-        THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-        return retval;
-    });
-
-#ifdef ERROR_CHECKING
-    if (src == NULL)
-        THROW_ERR(-1, "COULD NOT GET SRC PTR", {
-            THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-            return retval;
-        });
-#endif
-
-    memcpy(dst, src, (count * pool->stride));
-
-    THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-    return 0;
-}
-
-int pool_cpy_in(void *src, pool_t *pool, unsigned long int start, unsigned long int count)
-{
-#ifdef ERROR_CHECKING
-    if (src == NULL)
-        THROW_ERR(-1, "CANNOT COPY FROM NULL PTR", return retval);
-    if ((start + count) > pool->max_count)
-        THROW_ERR(-1, "TRYING TO COPY OUTSIDE OF BUFFER", return retval);
-#endif
-
-    THROW_ERR(pthread_rwlock_wrlock(&(pool->rwlock)), strerror(errno), return retval);
-
-    void *dst = NULL;
-    CHECK(pool_get_ptr(&dst, pool, start), {
-        THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-        return retval;
-    });
-
-#ifdef ERROR_CHECKING
-    if (dst == NULL)
-        THROW_ERR(-1, "COULD NOT GET DST PTR", {
-            THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-            return retval;
-        });
-#endif
-
-    memcpy(dst, src, (count * pool->stride));
-
-    THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
+    CHECK_ERR(pthread_rwlock_rdlock(&(pool->rwlock)), strerror(errno), return errno);
+    for (size_t index = 0; index < count; index++)
+    {
+        void *dst = __pool_get_ptr(pool, index + start_index);
+        if (dst != NULL)
+            memcpy(dst, (void *)(((size_t)src) + (start_index * stride)), size);
+    }
+    CHECK_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return errno);
 
     return 0;
 }
 
-int pool_cpy_in_b(pool_t *pool, void *src, unsigned long int start, unsigned long int count)
-{
-#ifdef ERROR_CHECKING
-    THROW_ERR((src == NULL), "CANNOT COPY FROM NULL PTR", return retval);
-    THROW_ERR((((start * pool->stride) + count) > pool->block_size), "TRYING TO COPY OUTSIDE OF BUFFER", return retval);
-#endif
-
-    THROW_ERR(pthread_rwlock_wrlock(&(pool->rwlock)), strerror(errno), return retval);
-
-    void *dst = NULL;
-    CHECK(pool_get_ptr(&dst, pool, start), {
-        THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-        return retval;
-    });
-
-#ifdef ERROR_CHECKING
-    if (dst == NULL)
-        THROW_ERR(-1, "COULD NOT GET DST PTR", {
-            THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-            return retval;
-        });
-#endif
-
-    memcpy(dst, src, count);
-
-    THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-    return 0;
-}
-
-int pool_cpy_out_b(pool_t *pool, void *dst, unsigned long int start, unsigned long int count)
-{
-#ifdef ERROR_CHECKING
-    if (dst == NULL)
-        THROW_ERR(-1, "CANNOT WRITE TO NULL PTR", return retval);
-    if (((start * pool->stride) + count) > pool->block_size)
-        THROW_ERR(-1, "TRYING TO COPY OUTSIDE OF BUFFER", return retval);
-#endif
-
-    THROW_ERR(pthread_rwlock_rdlock(&(pool->rwlock)), strerror(errno), return retval);
-
-    void *src = NULL;
-    CHECK(pool_get_ptr(&src, pool, start), {
-        THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-        return retval;
-    });
-
-#ifdef ERROR_CHECKING
-    if (src == NULL)
-        THROW_ERR(-1, "COULD NOT GET SRC PTR", {
-            THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-            return retval;
-        });
-#endif
-
-    memcpy(dst, src, count);
-
-    THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-    return 0;
-}
-
-int pool_memset_b(pool_t *pool, int val, unsigned long int start, unsigned long int count)
+int __pool_cpy_out(pool_t *pool, void *dst, size_t start_index, size_t count, size_t stride, size_t size)
 {
 
-#ifdef ERROR_CHECKING
-    if (((start * pool->stride) + count) > pool->block_size)
-        THROW_ERR(-1, "TRYING TO COPY OUTSIDE OF BUFFER", return retval);
-#endif
-
-    THROW_ERR(pthread_rwlock_rdlock(&(pool->rwlock)), strerror(errno), return retval);
-
-    void *dst = NULL;
-    CHECK(pool_get_ptr(&dst, pool, start), {
-        THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-        return retval;
-    });
-
-#ifdef ERROR_CHECKING
-    if (dst == NULL)
-        THROW_ERR(-1, "COULD NOT GET DST PTR", {
-            THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-            return retval;
-        });
-#endif
-
-    memset(dst, val, count);
-
-    THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-    return 0;
-}
-
-int pool_move(pool_t *pool, unsigned long int sourc, unsigned long int desti, unsigned long int count)
-{
-    if (count == 0 || sourc == desti)
+    CHECK_ERR(
+        pool == NULL || (start_index + count) * pool->item_size > pool->buf_len || size > pool->item_size
+            ? EINVAL
+            : EXIT_SUCCESS,
+        strerror(errno), return errno);
+    if (dst == NULL || count <= 0 || size <= 0)
     {
         return 0;
     }
-#ifdef ERROR_CHECKING
-    if ((sourc + count) > pool->max_count)
-        THROW_ERR(-1, "TRYING TO MOVE OUTSIDE OF BUFFER", return retval);
-    if ((desti + count) > pool->max_count)
-        THROW_ERR(-1, "TRYING TO MOVE OUTSIDE OF BUFFER", return retval);
-#endif
 
-    THROW_ERR(pthread_rwlock_wrlock(&(pool->rwlock)), strerror(errno), return retval);
+    CHECK_ERR(pthread_rwlock_rdlock(&(pool->rwlock)), strerror(errno), return errno);
+    for (size_t index = 0; index < count; index++)
+    {
+        void *src = __pool_get_ptr(pool, index + start_index);
+        double *dst_double = (double *)(((size_t)dst) + (index * stride));
+        if (src != NULL)
+            memcpy((void *)dst_double, src, size);
+    }
+    CHECK_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return errno);
 
-    void *src = NULL;
-    CHECK(pool_get_ptr(&src, pool, sourc), {
-        THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-        return retval;
-    });
-    void *dst = NULL;
-    CHECK(pool_get_ptr(&dst, pool, desti), {
-        THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-        return retval;
-    });
+    return 0;
+}
 
-#ifdef ERROR_CHECKING
-    if (src == NULL)
-        THROW_ERR(-1, "COULD NOT GET SRC PTR", {
-            THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-            return retval;
-        });
-    if (dst == NULL)
-        THROW_ERR(-1, "COULD NOT GET DST PTR", {
-            THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
-            return retval;
-        });
-#endif
+int __pool_memset(pool_t *pool, int val, size_t start_index, size_t count)
+{
+    CHECK_ERR(
+        pool == NULL || (start_index + count) * pool->item_size > pool->buf_len
+            ? EINVAL
+            : EXIT_SUCCESS,
+        strerror(errno), return errno);
+    if (count <= 0)
+    {
+        return 0;
+    }
 
-    memmove(dst, src, (count * pool->stride));
+    CHECK_ERR(pthread_rwlock_rdlock(&(pool->rwlock)), strerror(errno), return errno);
+    void *dst = __pool_get_ptr(pool, start_index);
+    if (dst != NULL)
+        memset(dst, val, count * pool->item_size);
+    CHECK_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return errno);
 
-    THROW_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return retval);
+    return 0;
+}
 
+int __pool_memmove(pool_t *pool, size_t sourc, size_t desti, size_t count)
+{
+    CHECK_ERR(pool == NULL ? EINVAL : EXIT_SUCCESS, strerror(errno), return errno);
+    CHECK_ERR((sourc + count) * pool->item_size > pool->buf_len ? EINVAL : EXIT_SUCCESS, strerror(errno), return errno);
+    CHECK_ERR((desti + count) * pool->item_size > pool->buf_len ? EINVAL : EXIT_SUCCESS, strerror(errno), return errno);
+
+    if (count <= 0 || sourc == desti)
+    {
+        return 0;
+    }
+
+    CHECK_ERR(pthread_rwlock_rdlock(&(pool->rwlock)), strerror(errno), return errno);
+    void *src = __pool_get_ptr(pool, sourc);
+    void *dst = __pool_get_ptr(pool, desti);
+    if (src != NULL && dst != NULL)
+        memmove(dst, src, (count * pool->item_size));
+    CHECK_ERR(pthread_rwlock_unlock(&(pool->rwlock)), strerror(errno), return errno);
+
+    return 0;
+}
+
+#define DEFAULT_P_CPY_IN __pool_cpy_in
+#define DEFAULT_P_CPY_OUT __pool_cpy_out
+#define DEFAULT_P_MEMSET __pool_memset
+#define DEFAULT_P_MEMMOVE __pool_memmove
+
+int pool_init(
+    pool_t *pool,
+    size_t backing_buffer_length,
+    void *backing_buffer,
+    size_t item_size,
+    size_t chunk_alignment,
+    pool_cpy_in_func_t cpy_in,
+    pool_cpy_out_func_t cpy_out,
+    pool_memset_func_t memset,
+    pool_memmove_func_t memmove)
+{
+    CHECK_ERR(
+        backing_buffer == NULL
+            ? EINVAL
+            : EXIT_SUCCESS,
+        strerror(errno), return errno);
+
+    // Align backing buffer to the specified chunk alignment
+    void *start = (void *)align_forward((unsigned long)backing_buffer, (unsigned long)chunk_alignment);
+
+    backing_buffer_length -= start - backing_buffer;
+
+    // Align chunk size up to the required chunk_alignment
+    item_size = align_forward(item_size, chunk_alignment);
+
+    CHECK_ERR(
+        backing_buffer_length < item_size
+            ? EINVAL
+            : EXIT_SUCCESS,
+        strerror(errno), return errno);
+
+    *pool = (pool_t){
+        .buf = (unsigned char *)start,
+        .buf_len = backing_buffer_length,
+        .item_size = item_size,
+        .cpy_in = (cpy_in == NULL) ? DEFAULT_P_CPY_IN : cpy_in,
+        .cpy_out = (cpy_out == NULL) ? DEFAULT_P_CPY_OUT : cpy_out,
+        .memset = (memset == NULL) ? DEFAULT_P_MEMSET : memset,
+        .memmove = (memmove == NULL) ? DEFAULT_P_MEMMOVE : memmove,
+    };
     return 0;
 }

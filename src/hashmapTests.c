@@ -15,32 +15,55 @@ typedef struct wordcounter_s
     unsigned char word_buff[MAX_KEY_LEN];
 } wordcounter_t;
 
-#define MAX_WORD 65536ul
+#define MAX_WORD 65536UL
 
 int hashmap_test()
 {
-    program_state_t now_state = INIT;
-    CHECK(set_current_state(now_state), return EXIT_FAILURE);
+    wordcounter_t *freelist_buffer = malloc(MAX_WORD * sizeof(wordcounter_t));
+    hash_node_t **hash_node_ptr_array = malloc(MAX_WORD * sizeof(hash_node_t *));
+    hash_node_t *hash_node_array = malloc(MAX_WORD * sizeof(hash_node_t));
 
-    freelist_t wordcount_freelist;
-    memset(&wordcount_freelist, 0, sizeof(freelist_t));
-    CHECK(freelist_alloc(&wordcount_freelist, MAX_WORD, sizeof(wordcounter_t)), return EXIT_FAILURE);
+    // wordcounter_t freelist_buffer[MAX_WORD] = {0};
+    // hash_node_t *hash_node_ptr_array[MAX_WORD] = {0};
+    // hash_node_t hash_node_array[MAX_WORD] = {0};
 
-    hashmap_t hashmap;
-    memset(&hashmap, 0, sizeof(hashmap_t));
-    CHECK(hashmap_alloc(&hashmap, NULL, MAX_WORD, MAX_WORD), return EXIT_FAILURE);
+    freelist_t wordcount_freelist = {0};
+    hashmap_t hashmap = {0};
 
     FILE *f_ptr;
-    f_ptr = fopen("./resources/pg100.txt", "r");
-    THROW_ERR(!f_ptr, strerror(errno), return EXIT_FAILURE);
+    char x[256] = {0};
+    char y[256] = {0};
 
-    char x[256];
-    memset(x, 0, 256 * sizeof(char));
-    char y[256];
-    memset(y, 0, 256 * sizeof(char));
+    program_state_t now_state;
+
+    now_state = INIT;
+    CHECK_ERR(set_current_state(now_state), strerror(errno), return errno);
+
+    freelist_init(&wordcount_freelist,
+                  MAX_WORD * sizeof(wordcounter_t),
+                  (void *)freelist_buffer,
+                  sizeof(freelist_buffer[0]),
+                  8UL,
+                  NULL,
+                  NULL);
+
+    CHECK_ERR(hashmap_init(
+                  &hashmap,
+                  MAX_WORD,
+                  hash_node_ptr_array,
+                  MAX_WORD,
+                  hash_node_array,
+                  NULL,
+                  NULL,
+                  NULL,
+                  NULL),
+              strerror(errno), return errno);
+
+    f_ptr = fopen("./resources/pg100.txt", "r");
+    CHECK_ERR(!f_ptr, strerror(errno), return errno);
 
     now_state = RUN;
-    CHECK(set_current_state(now_state), return EXIT_FAILURE);
+    CHECK_ERR(set_current_state(now_state), strerror(errno), return errno);
 
     while (fscanf(f_ptr, " %255s", x) == 1)
     {
@@ -60,18 +83,17 @@ int hashmap_test()
         {
             wordcounter_t *wordcount = NULL;
 
-            CHECK(hashmap_find((void **)&wordcount, &hashmap, (unsigned char *)y, key_size), return EXIT_FAILURE);
+            // hashmap_find((void **)&wordcount, &hashmap, (unsigned char *)y, key_size);
+            HASHMAP_FIND(hashmap, key_size, y, wordcount);
 
             if (wordcount == NULL)
             {
-                unsigned long int index = -1;
-                CHECK(freelist_aquire(&index, &wordcount_freelist), return EXIT_FAILURE);
-                CHECK(pool_get_ptr((void **)&wordcount, &(wordcount_freelist.pool), index), return EXIT_FAILURE);
+                FREELIST_GET(wordcount_freelist, wordcount);
+                memset(wordcount, 0, sizeof(*wordcount));
 
                 wordcount->count = 1;
-                memset(&(wordcount->word_buff), 0, MAX_KEY_LEN * sizeof(unsigned char));
                 memcpy(&(wordcount->word_buff), y, key_size);
-                CHECK(hashmap_add(wordcount, &hashmap, (unsigned char *)y, key_size), return EXIT_FAILURE);
+                HASHMAP_ADD(hashmap, key_size, (unsigned char *)y, wordcount);
             }
             else
             {
@@ -83,13 +105,10 @@ int hashmap_test()
         memset(y, 0, 256 * sizeof(char));
     }
 
-    now_state = INIT;
-    CHECK(set_current_state(now_state), return EXIT_FAILURE);
-
+    hashmap_print_nodes(&hashmap);
+    now_state = STOP;
+    set_current_state(now_state);
     fclose(f_ptr);
-    CHECK(hashmap_print_nodes(&hashmap), return EXIT_FAILURE);
-    CHECK(hashmap_free(&hashmap), return EXIT_FAILURE);
-    CHECK(freelist_free(&wordcount_freelist), return EXIT_FAILURE);
 
     return 0;
 }

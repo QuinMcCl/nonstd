@@ -1,23 +1,45 @@
-#ifndef FREELIST_H
-#define FREELIST_H
-#include "pool.h"
+
+#ifndef FREELIST_STATIC_H
+#define FREELIST_STATIC_H
 
 #include <pthread.h>
 
-typedef struct freelist_s
+#ifdef __cplusplus
+extern "C"
 {
-    unsigned long int first;
-    pthread_mutex_t mutex_lock;
-    pool_t pool;
-} freelist_t;
+#endif
 
+#define FREELIST_GET(FL, I) FL.get(&(FL), (void **)&I)
+#define FREELIST_REL(FL, I) FL.rel(&(FL), (void *)I)
 
+    typedef struct freelist_s freelist_t;
+    typedef int (*freelist_get_func_t)(freelist_t *fl, void **item);
+    typedef int (*freelist_rel_func_t)(freelist_t *fl, void *item);
 
+    struct freelist_s
+    {
+        freelist_get_func_t get;
+        freelist_rel_func_t rel;
 
-int freelist_alloc(freelist_t *free_list, unsigned long int item_count, unsigned long int item_size);
-int freelist_free(freelist_t *free_list);
+        pthread_mutex_t lock_list;
 
-int freelist_aquire(unsigned long int *dst, freelist_t *free_list);
-int freelist_release(unsigned long int *src, freelist_t *free_list);
+        unsigned char *buf;
+        void *first;
+        void *start;
+        size_t buf_len;
+        size_t item_size;
+    };
+
+    int freelist_init(freelist_t *fl,
+                      size_t backing_buffer_length,
+                      void *backing_buffer,
+                      size_t item_size,
+                      size_t chunk_alignment,
+                      freelist_get_func_t get_func,
+                      freelist_rel_func_t rel_func);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif

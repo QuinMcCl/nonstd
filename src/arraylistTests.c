@@ -15,11 +15,13 @@
 int arraylist_test()
 {
     srand(0);
-    arraylist_t list;
-    memset(&list, 0, sizeof(list));
-    CHECK(arraylist_alloc(&list, ARRAY_SIZE, sizeof(double)), return EXIT_FAILURE);
+    arraylist_t list = {0};
+    double backingBufffer[ARRAY_SIZE] __attribute__((__aligned__(8))) = {0};
+    double a[MOVE_COUNT] __attribute__((__aligned__(8))) = {0};
+    double src[ARRAY_SIZE] __attribute__((__aligned__(8))) = {0};
 
-    double src[ARRAY_SIZE];
+    arraylist_init(&list, sizeof(backingBufffer), (void *)backingBufffer, sizeof(double), 8UL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+
     for (unsigned int i = 0; i < ARRAY_SIZE; i++)
     {
         src[i] = (double)rand() / (double)RAND_MAX;
@@ -27,28 +29,20 @@ int arraylist_test()
     }
     fprintf(stdout, "\n");
 
-    CHECK(arraylist_push_back(&src, &list, ARRAY_SIZE), return EXIT_FAILURE);
+    CHECK_ERR(ARRAYLIST_PUSH_BACK(list, src, ARRAY_SIZE, sizeof(src[0]), sizeof(src[0])), strerror(errno), return errno);
 
-    double a[MOVE_COUNT];
-    for (unsigned int i = 0; i < ITERMAX; i++)
+    for (unsigned long int i = 0; i < ITERMAX; i++)
     {
-
-        unsigned long int ai = rand() % (ARRAY_SIZE - MOVE_COUNT);
-        unsigned long int bi = rand() % (ARRAY_SIZE - MOVE_COUNT);
-
-        CHECK(arraylist_remove((void *)&a, &list, ai, MOVE_COUNT), return EXIT_FAILURE);
-        CHECK(arraylist_insert((void *)&a, &list, bi, MOVE_COUNT), return EXIT_FAILURE);
+        CHECK_ERR(ARRAYLIST_REMOVE(list, a, (rand() % (ARRAY_SIZE - MOVE_COUNT)), MOVE_COUNT, sizeof(a[0]), sizeof(a[0])), strerror(errno), return errno);
+        CHECK_ERR(ARRAYLIST_INSERT(list, a, (rand() % (ARRAY_SIZE - MOVE_COUNT)), MOVE_COUNT, sizeof(a[0]), sizeof(a[0])), strerror(errno), return errno);
     }
 
-    CHECK(arraylist_pop_back(&src, &list, ARRAY_SIZE), return EXIT_FAILURE);
+    CHECK_ERR(ARRAYLIST_POP_BACK(list, src, ARRAY_SIZE, sizeof(src[0]), sizeof(src[0])), strerror(errno), return errno);
 
     for (unsigned int i = 0; i < ARRAY_SIZE; i++)
     {
         fprintf(stdout, "%f\t", src[i]);
     }
     fprintf(stdout, "\n");
-
-    CHECK(arraylist_free(&list), return EXIT_FAILURE);
-
     return 0;
 }

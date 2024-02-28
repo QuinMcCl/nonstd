@@ -1,7 +1,11 @@
 #include <assert.h>
+#include <string.h>
 #include <time.h>
 #include <errno.h>
 #include <stdio.h>
+
+#include "safeguards.h"
+#include "queue.h"
 #include "async.h"
 #include "asyncTests.h"
 
@@ -22,10 +26,10 @@ void worker_test(void *args)
     unsigned long fib = fibb(test_args->index);
 
     fprintf(stdout, "worker done %lu, fib: %lu\n", test_args->index, fib);
-    pthread_mutex_lock(&(test_args->done_lock));
+    CHECK_ERR(pthread_mutex_lock(&(test_args->done_lock)), strerror(errno), return);
     test_args->done = 1;
-    pthread_cond_signal(&(test_args->done_cond));
-    pthread_mutex_unlock(&(test_args->done_lock));
+    CHECK_ERR(pthread_cond_broadcast(&(test_args->done_cond)), strerror(errno), return);
+    CHECK_ERR(pthread_mutex_unlock(&(test_args->done_lock)), strerror(errno), return);
 }
 
 int async_test()
@@ -41,7 +45,7 @@ int async_test()
 
     task_queue_t tq = {0};
 
-    task_queue_init(&tq, sizeof(task_buffer), task_buffer, NULL, NULL, sizeof(threads), threads, NULL);
+    CHECK_ERR(task_queue_init(&tq, sizeof(task_buffer), task_buffer, NULL, NULL, MAX_THREADS, threads, NULL), strerror(errno), return errno);
 
     for (unsigned long task_index = 0; task_index < NUM_TASKS; task_index++)
     {
@@ -54,26 +58,20 @@ int async_test()
         task.func = worker_test;
         task.args = &(args[task_index]);
 
-        while (tq.queue.push(&(tq.queue), sizeof(task), &task))
-        {
-            pthread_mutex_lock(&(tq.queue.lock_queue));
-            fprintf(stdout, "task queue full %lu / %lu\n", tq.queue.mNumItems, tq.queue.mMaxItems);
-            while (tq.queue.mNumItems >= tq.queue.mMaxItems)
-                pthread_cond_wait(&(tq.queue.size_cond), &(tq.queue.lock_queue));
-            pthread_mutex_unlock(&(tq.queue.lock_queue));
-        }
+        QUEUE_PUSH(tq.queue, task, 1);
         fprintf(stdout, "Started %lu\n", task_index);
     }
 
     for (unsigned long task_index = 0; task_index < NUM_TASKS; task_index++)
     {
         fprintf(stdout, "waiting on %lu\n", task_index);
-        pthread_mutex_lock(&(args[task_index].done_lock));
+
+        CHECK_ERR(pthread_mutex_lock(&(args[task_index].done_lock)), strerror(errno), return errno);
         while (!args[task_index].done)
         {
-            pthread_cond_wait(&(args[task_index].done_cond), &(args[task_index].done_lock));
+            CHECK_ERR(pthread_cond_wait(&(args[task_index].done_cond), &(args[task_index].done_lock)), strerror(errno), return errno);
         }
-        pthread_mutex_unlock(&(args[task_index].done_lock));
+        CHECK_ERR(pthread_mutex_unlock(&(args[task_index].done_lock)), strerror(errno), return errno);
 
         clock_gettime(CLOCK_MONOTONIC, &(args[task_index].dequeue_time));
 
