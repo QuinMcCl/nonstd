@@ -16,11 +16,10 @@ extern "C"
 
         struct timespec enqueue_time;
         struct timespec dequeue_time;
-
     };
 
-
     int async_test();
+    void async_async_test(void *args);
 
 #ifdef __cplusplus
 } /* extern "C" */

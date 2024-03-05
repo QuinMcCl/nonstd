@@ -14,27 +14,35 @@ int __queue_push(queue_t *q, size_t item_size, const void *item, int blocking)
             ? EINVAL
             : EXIT_SUCCESS,
         strerror(errno), return errno);
+    int retval = EXIT_SUCCESS;
 
     CHECK_ERR(pthread_mutex_lock(&(q->lock_queue)), strerror(errno), return errno);
 
     while (blocking && q->mNumItems >= q->mMaxItems)
-        CHECK_ERR(pthread_cond_wait(&(q->size_cond), &(q->lock_queue)), strerror(errno), return errno);
+        retval = pthread_cond_wait(&(q->size_cond), &(q->lock_queue));
 
-    void *new_head = q->head + q->item_size;
-    if (new_head + q->item_size > q->start + q->buf_len)
+    if (!retval)
     {
-        new_head = q->start;
-    }
-    if (q->mNumItems < q->mMaxItems && new_head != q->tail)
-    {
-        memcpy(q->head, item, item_size);
-        q->head = new_head;
-        q->mNumItems++;
-        CHECK_ERR(pthread_cond_broadcast(&(q->size_cond)), strerror(errno), return errno);
+        void *new_head = q->head + q->item_size;
+        if (new_head + q->item_size > q->start + q->buf_len)
+        {
+            new_head = q->start;
+        }
+        if (q->mNumItems < q->mMaxItems && new_head != q->tail)
+        {
+            memcpy(q->head, item, item_size);
+            q->head = new_head;
+            q->mNumItems++;
+            retval = pthread_cond_broadcast(&(q->size_cond));
+        }
+        else
+        {
+            retval = EAGAIN;
+        }
     }
 
     CHECK_ERR(pthread_mutex_unlock(&(q->lock_queue)), strerror(errno), return errno);
-    return EXIT_SUCCESS;
+    return retval;
 }
 
 int __queue_pop(queue_t *q, size_t item_size, void *item, int blocking)
