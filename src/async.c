@@ -53,3 +53,28 @@ int task_queue_init(
     }
     return 0;
 }
+
+int task_queue_close(task_queue_t *tq)
+{
+    async_task_t task = {0};
+    tq->run = 0;
+
+    task.func = NULL;
+    task.funcName = "STOP";
+    task.args = NULL;
+
+    for (unsigned long worker_index = 0; worker_index < tq->num_worker; worker_index++)
+    {
+        QUEUE_PUSH(tq->queue, task, 1);
+    }
+
+    for (unsigned long worker_index = 0; worker_index < tq->num_worker; worker_index++)
+    {
+        pthread_join((tq->worker_array[worker_index]), NULL);
+    }
+
+    tq->work = NULL;
+    tq->num_worker = 0;
+    tq->worker_array = 0;
+    return 0;
+}

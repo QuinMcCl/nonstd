@@ -39,6 +39,7 @@ extern "C"
         unsigned long num_worker,
         pthread_t *worker_array,
         work_func_t work_func);
+    int task_queue_close(task_queue_t *tq);
 
 #ifdef __cplusplus
 } /* extern "C" */
