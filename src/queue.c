@@ -52,13 +52,14 @@ int __queue_pop(queue_t *q, size_t item_size, void *item, int blocking)
             ? EINVAL
             : EXIT_SUCCESS,
         strerror(errno), return errno);
+    int retval = EXIT_SUCCESS;
 
     CHECK_ERR(pthread_mutex_lock(&(q->lock_queue)), strerror(errno), return errno);
 
     while (blocking && q->mNumItems <= 0)
-        CHECK_ERR(pthread_cond_wait(&(q->size_cond), &(q->lock_queue)), strerror(errno), return errno);
+        retval = pthread_cond_wait(&(q->size_cond), &(q->lock_queue));
 
-    if (q->mNumItems > 0 && q->tail != q->head)
+    if (!retval && q->mNumItems > 0 && q->tail != q->head)
     {
         memcpy(item, q->tail, item_size);
         q->tail += q->item_size;
@@ -69,8 +70,13 @@ int __queue_pop(queue_t *q, size_t item_size, void *item, int blocking)
         q->mNumItems--;
         CHECK_ERR(pthread_cond_broadcast(&(q->size_cond)), strerror(errno), return errno);
     }
+    else
+    {
+        retval = EAGAIN;
+    }
+
     CHECK_ERR(pthread_mutex_unlock(&(q->lock_queue)), strerror(errno), return errno);
-    return EXIT_SUCCESS;
+    return retval;
 }
 
 #define DEFAULT_Q_PUSH __queue_push
