@@ -7,16 +7,17 @@
 #include "queue.h"
 #include "async.h"
 
+#define ON_ERROR return NULL;
 void *__workerFunction(void *args)
 {
-    CHECK_ERR(args == NULL ? EINVAL : EXIT_SUCCESS, strerror(errno), return NULL);
+    assert(args != NULL);
     task_queue_t *tq = args;
     async_task_t task = {0};
     while (tq->run)
     {
         task.func = NULL;
         task.args = NULL;
-        CHECK_ERR(QUEUE_POP(tq->queue, task, 1), strerror(errno), return NULL);
+        CHECK_ERR(QUEUE_POP(tq->queue, task, 1));
 
         if (task.func != NULL)
         {
@@ -28,6 +29,8 @@ void *__workerFunction(void *args)
 
 #define DEFAULT_WORK_FUNC __workerFunction
 
+#undef ON_ERROR
+#define ON_ERROR return errno;
 int task_queue_init(
     task_queue_t *tq,
     size_t queue_buffer_length,
@@ -38,7 +41,7 @@ int task_queue_init(
     pthread_t *worker_array,
     work_func_t work_func)
 {
-    CHECK_ERR(queue_init(&(tq->queue), queue_buffer_length, queue_buffer, sizeof(async_task_t), 8UL, push_func, pop_func), strerror(errno), return errno);
+    CHECK_ERR(queue_init(&(tq->queue), queue_buffer_length, queue_buffer, sizeof(async_task_t), 8UL, push_func, pop_func));
 
     tq->work = work_func == NULL ? DEFAULT_WORK_FUNC : work_func;
 
@@ -78,3 +81,5 @@ int task_queue_close(task_queue_t *tq)
     tq->worker_array = 0;
     return 0;
 }
+
+#undef ON_ERROR

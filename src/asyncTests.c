@@ -9,6 +9,7 @@
 #include "async.h"
 #include "asyncTests.h"
 
+#define ON_ERROR return errno;
 unsigned long fibb(unsigned long i)
 {
     if (i == 0ul || i == 1ul)
@@ -17,6 +18,8 @@ unsigned long fibb(unsigned long i)
         return fibb(i - 1ul) + fibb(i - 2ul);
 }
 
+#undef ON_ERROR
+#define ON_ERROR return;
 void worker_test(void *args)
 {
     assert(args != NULL);
@@ -26,12 +29,14 @@ void worker_test(void *args)
     unsigned long fib = fibb(test_args->index);
 
     fprintf(stdout, "worker done %lu, fib: %lu\n", test_args->index, fib);
-    CHECK_ERR(pthread_mutex_lock(&(test_args->done_lock)), strerror(errno), return);
+    CHECK_ERR(pthread_mutex_lock(&(test_args->done_lock)));
     test_args->done = 1;
-    CHECK_ERR(pthread_cond_broadcast(&(test_args->done_cond)), strerror(errno), return);
-    CHECK_ERR(pthread_mutex_unlock(&(test_args->done_lock)), strerror(errno), return);
+    CHECK_ERR(pthread_cond_broadcast(&(test_args->done_cond)));
+    CHECK_ERR(pthread_mutex_unlock(&(test_args->done_lock)));
 }
 
+#undef ON_ERROR
+#define ON_ERROR return errno;
 int async_test()
 {
 #define MAX_CONCURRENT_TASKS 17UL
@@ -45,7 +50,7 @@ int async_test()
 
     task_queue_t tq = {0};
 
-    CHECK_ERR(task_queue_init(&tq, sizeof(task_buffer), task_buffer, NULL, NULL, MAX_THREADS, threads, NULL), strerror(errno), return errno);
+    CHECK_ERR(task_queue_init(&tq, sizeof(task_buffer), task_buffer, NULL, NULL, MAX_THREADS, threads, NULL));
 
     for (unsigned long task_index = 0; task_index < NUM_TASKS; task_index++)
     {
@@ -66,12 +71,12 @@ int async_test()
     {
         fprintf(stdout, "waiting on %lu\n", task_index);
 
-        CHECK_ERR(pthread_mutex_lock(&(args[task_index].done_lock)), strerror(errno), return errno);
+        CHECK_ERR(pthread_mutex_lock(&(args[task_index].done_lock)));
         while (!args[task_index].done)
         {
-            CHECK_ERR(pthread_cond_wait(&(args[task_index].done_cond), &(args[task_index].done_lock)), strerror(errno), return errno);
+            CHECK_ERR(pthread_cond_wait(&(args[task_index].done_cond), &(args[task_index].done_lock)));
         }
-        CHECK_ERR(pthread_mutex_unlock(&(args[task_index].done_lock)), strerror(errno), return errno);
+        CHECK_ERR(pthread_mutex_unlock(&(args[task_index].done_lock)));
 
         clock_gettime(CLOCK_MONOTONIC, &(args[task_index].dequeue_time));
 
@@ -82,6 +87,8 @@ int async_test()
     return 0;
 }
 
+#undef ON_ERROR
+#define ON_ERROR return;
 void async_async_test(void *tq_ptr)
 {
     assert(tq_ptr != NULL);
@@ -108,12 +115,12 @@ void async_async_test(void *tq_ptr)
     {
         fprintf(stdout, "waiting on %lu\n", task_index);
 
-        CHECK_ERR(pthread_mutex_lock(&(args[task_index].done_lock)), strerror(errno), return);
+        CHECK_ERR(pthread_mutex_lock(&(args[task_index].done_lock)));
         while (!args[task_index].done)
         {
-            CHECK_ERR(pthread_cond_wait(&(args[task_index].done_cond), &(args[task_index].done_lock)), strerror(errno), return);
+            CHECK_ERR(pthread_cond_wait(&(args[task_index].done_cond), &(args[task_index].done_lock)));
         }
-        CHECK_ERR(pthread_mutex_unlock(&(args[task_index].done_lock)), strerror(errno), return);
+        CHECK_ERR(pthread_mutex_unlock(&(args[task_index].done_lock)));
 
         clock_gettime(CLOCK_MONOTONIC, &(args[task_index].dequeue_time));
 
@@ -121,3 +128,4 @@ void async_async_test(void *tq_ptr)
         fprintf(stdout, "TASK %lu WAITED %f SECONDS\n", task_index, diff_time);
     }
 }
+#undef ON_ERROR

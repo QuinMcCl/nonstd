@@ -2,6 +2,7 @@
 #define ASYNC_H
 
 #include <pthread.h>
+#include "queue.h"
 
 #ifdef __cplusplus
 extern "C"

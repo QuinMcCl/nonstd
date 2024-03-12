@@ -7,28 +7,29 @@
 #include "safeguards.h"
 #include "freelist.h"
 
-int __freelist_clr(freelist_t *fl, size_t item_size)
+#define ON_ERROR return errno;
+int __freelist_clr(freelist_t *fl)
 {
-    CHECK_ERR(fl == NULL || item_size <= 0 ? EINVAL : EXIT_SUCCESS, strerror(errno), return errno);
+    assert(fl != NULL && "NULL FREELIST PTR");
+    CHECK_ERR(pthread_mutex_lock(&(fl->lock_list)));
 
     void **item = fl->start;
 
-    unsigned long total_count = 0;
-    while ((size_t)item + item_size < (size_t)fl->start + fl->buf_len)
+    while ((size_t)item + fl->item_size < (size_t)fl->start + fl->buf_len)
     {
-        total_count++;
-        *item = (void *)(((size_t)item) + item_size);
+        *item = (void *)(((size_t)item) + fl->item_size);
         item = *item;
     }
-    total_count = 0;
+    CHECK_ERR(pthread_mutex_unlock(&(fl->lock_list)));
     return 0;
 }
 
 int __freelist_get(freelist_t *fl, void **item)
 {
-    CHECK_ERR(fl == NULL || item == NULL ? EINVAL : EXIT_SUCCESS, strerror(errno), return errno);
+    assert(fl != NULL && "NULL FREELIST PTR");
+    assert(item != NULL && "NULL ITEM PTR");
 
-    CHECK_ERR(pthread_mutex_lock(&(fl->lock_list)), strerror(errno), return errno);
+    CHECK_ERR(pthread_mutex_lock(&(fl->lock_list)));
 
     if (fl->first != NULL)
     {
@@ -37,19 +38,20 @@ int __freelist_get(freelist_t *fl, void **item)
         *item = free;
     }
 
-    CHECK_ERR(pthread_mutex_unlock(&(fl->lock_list)), strerror(errno), return errno);
+    CHECK_ERR(pthread_mutex_unlock(&(fl->lock_list)));
     return 0;
 }
 
 int __freelist_rel(freelist_t *fl, void *item)
 {
-    CHECK_ERR(fl == NULL || item < fl->start || item >= (void *)((size_t)fl->start + fl->buf_len) ? EINVAL : EXIT_SUCCESS, strerror(errno), return errno);
+    assert(fl != NULL && "NULL FREELIST PTR");
+    assert(item >= fl->start && item < (void *)((size_t)fl->start + fl->buf_len) && "ITEM NOT IN FREELIST");
 
-    CHECK_ERR(pthread_mutex_lock(&(fl->lock_list)), strerror(errno), return errno);
+    CHECK_ERR(pthread_mutex_lock(&(fl->lock_list)));
     void **free = item;
     *free = fl->first;
     fl->first = item;
-    CHECK_ERR(pthread_mutex_unlock(&(fl->lock_list)), strerror(errno), return errno);
+    CHECK_ERR(pthread_mutex_unlock(&(fl->lock_list)));
     return 0;
 }
 
@@ -64,9 +66,8 @@ int freelist_init(freelist_t *fl,
                   freelist_get_func_t get_func,
                   freelist_rel_func_t rel_func)
 {
-    CHECK_ERR(fl == NULL || backing_buffer == NULL || item_size <= 0 ? EINVAL : EXIT_SUCCESS, strerror(errno), return errno);
-
-    memset(backing_buffer, 0, backing_buffer_length);
+    assert(fl != NULL && "NULL FREELIST PTR");
+    assert(backing_buffer != NULL && "NULL BUFFER PTR");
 
     // Align backing buffer to the specified chunk alignment
     void *start = (void *)align_forward((unsigned long)backing_buffer, chunk_alignment);
@@ -77,7 +78,7 @@ int freelist_init(freelist_t *fl,
     item_size = align_forward(item_size, chunk_alignment);
 
     // Assert that the parameters passed are valid
-    CHECK_ERR(backing_buffer_length < item_size ? EINVAL : EXIT_SUCCESS, strerror(errno), return errno);
+    assert(backing_buffer_length >= item_size && "BUFFER TOO SMALL");
 
     // Store the adjusted parameters
     fl->buf = (unsigned char *)backing_buffer;
@@ -87,10 +88,12 @@ int freelist_init(freelist_t *fl,
     fl->start = start;
     fl->first = start;
 
-    CHECK_ERR(__freelist_clr(fl, item_size), strerror(errno), return errno);
+    CHECK_ERR(__freelist_clr(fl));
 
     fl->get = get_func == NULL ? DEFAULT_FREELIST_GET : get_func;
     fl->rel = rel_func == NULL ? DEFAULT_FREELIST_REL : rel_func;
 
     return 0;
 }
+
+#undef ON_ERROR

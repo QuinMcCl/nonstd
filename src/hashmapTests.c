@@ -9,6 +9,7 @@
 #include "freelist.h"
 #include "hashmap.h"
 
+#define ON_ERROR return errno;
 typedef struct wordcounter_s
 {
     unsigned long int count;
@@ -37,33 +38,32 @@ int hashmap_test()
     program_state_t now_state;
 
     now_state = INIT;
-    CHECK_ERR(set_current_state(now_state), strerror(errno), return errno);
+    CHECK_ERR(set_current_state(now_state));
 
-    freelist_init(&wordcount_freelist,
-                  MAX_WORD * sizeof(wordcounter_t),
-                  (void *)freelist_buffer,
-                  sizeof(freelist_buffer[0]),
-                  8UL,
-                  NULL,
-                  NULL);
+    CHECK_ERR(freelist_init(&wordcount_freelist,
+                            MAX_WORD * sizeof(wordcounter_t),
+                            (void *)freelist_buffer,
+                            sizeof(freelist_buffer[0]),
+                            8UL,
+                            NULL,
+                            NULL));
 
     CHECK_ERR(hashmap_init(
-                  &hashmap,
-                  MAX_WORD,
-                  hash_node_ptr_array,
-                  MAX_WORD,
-                  hash_node_array,
-                  NULL,
-                  NULL,
-                  NULL,
-                  NULL),
-              strerror(errno), return errno);
+        &hashmap,
+        MAX_WORD,
+        hash_node_ptr_array,
+        MAX_WORD,
+        hash_node_array,
+        NULL,
+        NULL,
+        NULL,
+        NULL));
 
     f_ptr = fopen("./resources/pg100.txt", "r");
-    CHECK_ERR(!f_ptr, strerror(errno), return errno);
+    CHECK_ERR(!f_ptr);
 
     now_state = RUN;
-    CHECK_ERR(set_current_state(now_state), strerror(errno), return errno);
+    CHECK_ERR(set_current_state(now_state));
 
     while (fscanf(f_ptr, " %255s", x) == 1)
     {
@@ -112,3 +112,4 @@ int hashmap_test()
 
     return 0;
 }
+#undef ON_ERROR

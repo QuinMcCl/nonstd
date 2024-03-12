@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -7,13 +7,10 @@
 #include "safeguards.h"
 #include "arraylist.h"
 
+#define ON_ERROR return errno;
 int __arraylist_push_back(arraylist_t *arraylist, void *src, size_t item_count, size_t item_size, size_t item_stride)
 {
-    CHECK_ERR(
-        arraylist == NULL
-            ? EINVAL
-            : EXIT_SUCCESS,
-        strerror(errno), return errno);
+    assert(arraylist != NULL && "NULL ARRAYLIST PTR");
 
     if (item_count == 0)
     {
@@ -21,7 +18,7 @@ int __arraylist_push_back(arraylist_t *arraylist, void *src, size_t item_count, 
     }
 
     int retval = 0;
-    CHECK_ERR(pthread_rwlock_wrlock(&(arraylist->rwlock)), strerror(errno), return errno);
+    CHECK_ERR(pthread_rwlock_wrlock(&(arraylist->rwlock)));
     if (arraylist->item_count + item_count > arraylist->max_count)
     {
         retval = EINVAL;
@@ -34,25 +31,20 @@ int __arraylist_push_back(arraylist_t *arraylist, void *src, size_t item_count, 
     {
         arraylist->item_count += item_count;
     }
-    CHECK_ERR(pthread_rwlock_unlock(&(arraylist->rwlock)), strerror(errno), return errno);
-    CHECK_ERR(retval, strerror(errno), return errno);
+    CHECK_ERR(pthread_rwlock_unlock(&(arraylist->rwlock)));
+    CHECK_ERR(retval);
     return retval;
 }
 int __arraylist_pop_back(arraylist_t *arraylist, void *dst, size_t item_count, size_t item_size, size_t item_stride)
 {
-    CHECK_ERR(
-        arraylist == NULL
-            ? EINVAL
-            : EXIT_SUCCESS,
-        strerror(errno), return errno);
-
+    assert(arraylist != NULL && "NULL ARRAYLIST PTR");
     if (item_count == 0)
     {
         return 0;
     }
 
     int retval = 0;
-    CHECK_ERR(pthread_rwlock_wrlock(&(arraylist->rwlock)), strerror(errno), return errno);
+    CHECK_ERR(pthread_rwlock_wrlock(&(arraylist->rwlock)));
     if (arraylist->item_count > item_count)
     {
         retval = EINVAL;
@@ -65,25 +57,20 @@ int __arraylist_pop_back(arraylist_t *arraylist, void *dst, size_t item_count, s
     {
         arraylist->item_count += item_count;
     }
-    CHECK_ERR(pthread_rwlock_unlock(&(arraylist->rwlock)), strerror(errno), return errno);
-    CHECK_ERR(retval, strerror(errno), return errno);
+    CHECK_ERR(pthread_rwlock_unlock(&(arraylist->rwlock)));
+    CHECK_ERR(retval);
     return retval;
 }
 int __arraylist_insert(arraylist_t *arraylist, void *src, size_t index, size_t item_count, size_t item_size, size_t item_stride)
 {
-    CHECK_ERR(
-        arraylist == NULL
-            ? EINVAL
-            : EXIT_SUCCESS,
-        strerror(errno), return errno);
-
+    assert(arraylist != NULL && "NULL ARRAYLIST PTR");
     if (item_count == 0)
     {
         return 0;
     }
 
     int retval = 0;
-    CHECK_ERR(pthread_rwlock_wrlock(&(arraylist->rwlock)), strerror(errno), return errno);
+    CHECK_ERR(pthread_rwlock_wrlock(&(arraylist->rwlock)));
     if (arraylist->item_count + item_count > arraylist->max_count)
     {
         retval = EINVAL;
@@ -100,25 +87,20 @@ int __arraylist_insert(arraylist_t *arraylist, void *src, size_t index, size_t i
     {
         arraylist->item_count += item_count;
     }
-    CHECK_ERR(pthread_rwlock_unlock(&(arraylist->rwlock)), strerror(errno), return errno);
-    CHECK_ERR(retval, strerror(errno), return errno);
+    CHECK_ERR(pthread_rwlock_unlock(&(arraylist->rwlock)));
+    CHECK_ERR(retval);
     return 0;
 }
 int __arraylist_remove(arraylist_t *arraylist, void *dst, size_t index, size_t item_count, size_t item_size, size_t item_stride)
 {
-    CHECK_ERR(
-        arraylist == NULL
-            ? EINVAL
-            : EXIT_SUCCESS,
-        strerror(errno), return errno);
-
+    assert(arraylist != NULL && "NULL ARRAYLIST PTR");
     if (item_count == 0)
     {
         return 0;
     }
 
     int retval = 0;
-    CHECK_ERR(pthread_rwlock_wrlock(&(arraylist->rwlock)), strerror(errno), return errno);
+    CHECK_ERR(pthread_rwlock_wrlock(&(arraylist->rwlock)));
     if (index + item_count > arraylist->item_count)
     {
         retval = EINVAL;
@@ -135,8 +117,8 @@ int __arraylist_remove(arraylist_t *arraylist, void *dst, size_t index, size_t i
     {
         arraylist->item_count -= item_count;
     }
-    CHECK_ERR(pthread_rwlock_unlock(&(arraylist->rwlock)), strerror(errno), return errno);
-    CHECK_ERR(retval, strerror(errno), return errno);
+    CHECK_ERR(pthread_rwlock_unlock(&(arraylist->rwlock)));
+    CHECK_ERR(retval);
     return 0;
 }
 
@@ -170,3 +152,4 @@ int arraylist_init(
     arraylist->remove = (remove == NULL) ? DEFAULT_A_REMOVE : remove;
     return 0;
 }
+#undef ON_ERROR

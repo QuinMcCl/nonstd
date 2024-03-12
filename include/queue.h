@@ -1,7 +1,6 @@
 #ifndef QUEUE_H
 #define QUEUE_H
 
-#include <stdatomic.h>
 #include <pthread.h>
 
 #ifdef __cplusplus
@@ -17,9 +16,6 @@ extern "C"
     typedef int (*pop_func_t)(queue_t *q, size_t item_size, void *item, int blocking);
     struct queue_s
     {
-        push_func_t push;
-        pop_func_t pop;
-
         unsigned char *buf;
         size_t buf_len;
         size_t item_size;
@@ -31,6 +27,9 @@ extern "C"
         void *start;
         void *head;
         void *tail;
+
+        push_func_t push;
+        pop_func_t pop;
     };
 
     int queue_init(

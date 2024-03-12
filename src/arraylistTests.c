@@ -12,6 +12,7 @@
 #define ITERMAX 65536ul
 #define MOVE_COUNT ARRAY_SIZE / 4ul
 
+#define ON_ERROR return errno;
 int arraylist_test()
 {
     srand(0);
@@ -29,15 +30,15 @@ int arraylist_test()
     }
     fprintf(stdout, "\n");
 
-    CHECK_ERR(ARRAYLIST_PUSH_BACK(list, src, ARRAY_SIZE, sizeof(src[0]), sizeof(src[0])), strerror(errno), return errno);
+    CHECK_ERR(ARRAYLIST_PUSH_BACK(list, src, ARRAY_SIZE, sizeof(src[0]), sizeof(src[0])));
 
     for (unsigned long int i = 0; i < ITERMAX; i++)
     {
-        CHECK_ERR(ARRAYLIST_REMOVE(list, a, (rand() % (ARRAY_SIZE - MOVE_COUNT)), MOVE_COUNT, sizeof(a[0]), sizeof(a[0])), strerror(errno), return errno);
-        CHECK_ERR(ARRAYLIST_INSERT(list, a, (rand() % (ARRAY_SIZE - MOVE_COUNT)), MOVE_COUNT, sizeof(a[0]), sizeof(a[0])), strerror(errno), return errno);
+        CHECK_ERR(ARRAYLIST_REMOVE(list, a, (rand() % (ARRAY_SIZE - MOVE_COUNT)), MOVE_COUNT, sizeof(a[0]), sizeof(a[0])));
+        CHECK_ERR(ARRAYLIST_INSERT(list, a, (rand() % (ARRAY_SIZE - MOVE_COUNT)), MOVE_COUNT, sizeof(a[0]), sizeof(a[0])));
     }
 
-    CHECK_ERR(ARRAYLIST_POP_BACK(list, src, ARRAY_SIZE, sizeof(src[0]), sizeof(src[0])), strerror(errno), return errno);
+    CHECK_ERR(ARRAYLIST_POP_BACK(list, src, ARRAY_SIZE, sizeof(src[0]), sizeof(src[0])));
 
     for (unsigned int i = 0; i < ARRAY_SIZE; i++)
     {
@@ -46,3 +47,5 @@ int arraylist_test()
     fprintf(stdout, "\n");
     return 0;
 }
+
+#undef ON_ERROR
